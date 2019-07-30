@@ -26,36 +26,40 @@ public class Q600Server {
 	private Logger logger = LoggerFactory.getLogger(getClass());
 	private final EventLoopGroup bossGroup = new NioEventLoopGroup();
 	private final EventLoopGroup workGroup = new NioEventLoopGroup();
-	private Channel channel;
+	private Channel serverChannel;
 	
-	public ChannelFuture start(int port) {
-		ServerBootstrap bootstrap = new ServerBootstrap();//启动 NIO 服务的辅助启动类
-		bootstrap.group(bossGroup, workGroup)
-				.channel(NioServerSocketChannel.class)//IO操作的多线程事件循环器
-				.childHandler(new Q600ServerInitializer())
-				.option(ChannelOption.SO_BACKLOG, 128)
-				.childOption(ChannelOption.SO_KEEPALIVE, true);
-		logger.info("netty服务器在[{}]端口启动监听", port);
-		// 绑定端口，开始接收进来的连接
-		ChannelFuture future = bootstrap.bind(port).syncUninterruptibly();//绑定当前机器所有网卡的port端口
-		channel = future.channel();
-		return future;
+	public void start(int port) {
+		try{
+			ServerBootstrap bootstrap = new ServerBootstrap();//启动 NIO 服务的辅助启动类
+			bootstrap.group(bossGroup, workGroup)
+					.channel(NioServerSocketChannel.class)//IO操作的多线程事件循环器
+					.childHandler(new Q600ServerInitializer())
+					.option(ChannelOption.SO_BACKLOG, 128)
+					.childOption(ChannelOption.SO_KEEPALIVE, true);
+			logger.info("netty服务器在[{}]端口启动监听", port);
+			// 绑定端口，开始接收进来的连接
+			ChannelFuture future = bootstrap.bind(port).syncUninterruptibly();//绑定当前机器所有网卡的port端口
+			serverChannel = future.channel();
+			logger.info("注册优雅关闭 serverChannel.closeFuture().sync()");
+			serverChannel.closeFuture().sync();
+			logger.info("已经开始关闭 serverChannel.closeFuture().sync()");
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+			logger.error("netty服务器channel关闭异常:{}",e.getMessage());
+		}finally {
+			workGroup.shutdownGracefully();
+			logger.info("执行了 workGroup.shutdownGracefully()");
+			bossGroup.shutdownGracefully();
+			logger.info("执行了 bossGroup.shutdownGracefully()");
+			logger.info("netty服务器关闭了~~");
+		}
 	}
 	
 	public void destroy() {
-		if(channel != null) {
-			try {
-				//优雅的关闭
-				channel.closeFuture().sync();
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-				logger.error("netty服务器channel关闭异常"+e.getMessage());
-			}
+		if(serverChannel != null) {
+			serverChannel.close();
+			serverChannel =null;
 		}
-		
-		workGroup.shutdownGracefully();
-		bossGroup.shutdownGracefully();
-		logger.info("netty服务器AgvServer关闭了~~");
 	}
 	
 	public static void main(String[] args) {
